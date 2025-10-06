@@ -3,10 +3,20 @@ import { getRAGClient } from '../api/ragClient';
 import { RAG_BACKEND } from '../config/appConfig';
 import MessageList from '../components/MessageList';
 import MessageInput from '../components/MessageInput';
+import IngestionBar from '../components/IngestionBar';
 import '../styles/chat.css';
 
 function makeId() {
   return Math.random().toString(36).slice(2);
+}
+
+function shortDomain(url = '') {
+  try {
+    const u = new URL(url);
+    return u.host.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
 }
 
 export default function ChatPage() {
@@ -22,13 +32,15 @@ export default function ChatPage() {
   );
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
+  const [corpus, setCorpus] = useState(/** @type {import('../api/types').Corpus | null} */(null));
   const abortRef = useRef(null);
 
   const sendNonStreaming = async (userText) => {
     const req = {
       conversationId: client.conversationId,
       messages: [{ role: 'user', content: userText }],
-      topK: 3
+      topK: 3,
+      options: { corpusId: corpus?.id }
     };
     const resp = await client.sendMessage(req);
     setMessages((prev) => {
@@ -47,7 +59,8 @@ export default function ChatPage() {
     const req = {
       conversationId: client.conversationId,
       messages: [{ role: 'user', content: userText }],
-      topK: 3
+      topK: 3,
+      options: { corpusId: corpus?.id }
     };
 
     const controller = new AbortController();
@@ -113,14 +126,32 @@ export default function ChatPage() {
     }
   };
 
+  const hasCorpus = !!corpus;
+  const domain = hasCorpus ? shortDomain(corpus.url) : '';
+
   return (
     <div className="chat-app">
       <header className="chat-header">
         <span className="brand-dot" />
         <div className="chat-title">RAG Chat</div>
+        {hasCorpus ? (
+          <div className="corpus-pill" title={corpus.url}>
+            <span className="corpus-dot" />
+            {domain}
+            <button
+              className="pill-clear"
+              onClick={() => setCorpus(null)}
+              aria-label="Clear active corpus"
+              title="Clear active source"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
       </header>
 
-      <main className="chat-container">
+      <div className="chat-container">
+        <IngestionBar client={client} onIngested={setCorpus} />
         {error ? <div className="inline-error" role="alert">{error}</div> : null}
         <MessageList messages={messages} />
         {isStreaming ? (
@@ -128,7 +159,7 @@ export default function ChatPage() {
             <span className="dot" /><span className="dot" /><span className="dot" />
           </div>
         ) : null}
-      </main>
+      </div>
 
       <MessageInput
         onSend={handleSend}

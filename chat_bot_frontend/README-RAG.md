@@ -10,8 +10,23 @@ This frontend includes a mock RAG client so the chat UI works end-to-end without
 - RAG client factory: `src/api/ragClient.js`
 - Chat UI:
   - Page: `src/pages/ChatPage.jsx`
-  - Components: `src/components/MessageList.jsx`, `src/components/MessageInput.jsx`
+  - Components: `src/components/MessageList.jsx`, `src/components/MessageInput.jsx`, `src/components/IngestionBar.jsx`
   - Styles: `src/styles/chat.css`
+
+## URL Ingestion (Mock)
+
+You can paste a URL and ingest it locally (no external services). After ingestion, answers are grounded in that page.
+
+How to use:
+1. In the header, use the “Ingest” bar to paste a URL (e.g., https://learn.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-portal) and click Ingest.
+2. A success banner will confirm ingestion and a pill will show the active source domain.
+3. Ask questions; the assistant will reference that page and cite it in the sources.
+4. Click the ✕ on the pill to clear the active source.
+
+Notes:
+- Ingested corpora live in-memory per browser session. Re-ingesting the same URL reuses the same corpus ID.
+- The chat request includes `options.corpusId` so answers can be grounded.
+- All logic is local and mock-only.
 
 ## Switching modes
 
@@ -25,21 +40,53 @@ REACT_APP_RAG_BASE_URL=https://your-rag-backend.example.com
 ```
 
 In `http` mode, the `HttpRAGClient` in `src/api/ragClient.js` provides the interface but is not implemented. You will need to implement:
-- `sendMessage(req): Promise<ChatResponse>`
-- `sendMessageStream(req, signal): AsyncGenerator`
+- `ingestUrl(url): Promise<IngestionResult>` -> POST `/ingest/url`
+- `sendMessage(req): Promise<ChatResponse>` -> POST `/chat`
+- `sendMessageStream(req, signal): AsyncGenerator` -> POST `/chat/stream` (optional)
 
-pointing to your backend endpoints.
+## Expected endpoints (for future backend)
 
-## Expected endpoints (example)
+- `POST /ingest/url`
+  - Request: `{ url: string }`
+  - Response:
+    ```json
+    {
+      "corpus": {
+        "id": "abc123",
+        "title": "Ingested: learn.microsoft.com",
+        "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/windows/quick-create-portal",
+        "createdAt": "2024-01-01T12:00:00.000Z"
+      },
+      "summary": "Content parsed and embedded."
+    }
+    ```
 
-- Non-streaming: `POST /chat`
-  - Body: `{ conversationId?: string, messages: [{role, content}], topK?: number, meta?: {} }`
-  - Response: `{ conversationId: string, answer: string, sources?: Source[], usage?: {} }`
+- `POST /chat`
+  - Request:
+    ```json
+    {
+      "conversationId": "optional",
+      "messages": [{ "role": "user", "content": "How do I create a Windows VM in Azure portal?" }],
+      "topK": 3,
+      "options": { "corpusId": "abc123" }
+    }
+    ```
+  - Response:
+    ```json
+    {
+      "conversationId": "conv-1",
+      "answer": "Grounded answer...",
+      "sources": [
+        { "id": "s1", "title": "Azure portal quick create", "url": "https://learn.microsoft.com/..."}
+      ],
+      "usage": { "tokens": 512 }
+    }
+    ```
 
-- Streaming: `POST /chat/stream` (SSE or chunked)
-  - Yields text chunks and a final message with sources.
+- `POST /chat/stream` (optional)
+  - Stream chunks of text and a final JSON payload with `sources`.
 
-You can adjust these in your implementation.
+CORS: Enable CORS for `http://localhost:3000`.
 
 ## Auth headers
 
