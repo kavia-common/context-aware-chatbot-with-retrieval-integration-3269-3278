@@ -1,0 +1,4 @@
+{
+    "command": "npm install && npx tsc --noEmit && npm test -- --ci",
+    "working_directory": "/home/kavia/workspace/code-generation/context-aware-chatbot-with-retrieval-integration-3269-3278/chat_bot_frontend"
+}
